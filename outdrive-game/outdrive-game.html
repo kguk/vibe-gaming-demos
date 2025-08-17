@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Retro OutRun Racer</title>
+  <style>
+    body { background: #55aacc; margin: 0; }
+    canvas { display: block; margin: 0 auto; background: #55aacc; }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="800" height="600"></canvas>
+  <script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const width = canvas.width;
+const height = canvas.height;
+
+// Game settings
+const roadWidth = 300;
+const lanes = 3;
+const segmentLength = 200;
+const cameraDepth = 0.8; // how much perspective
+const segments = 200; // how much road at a time
+const playerCar = { x: 0, speed: 0, maxSpeed: 400, accel: 2, decel: 4, wheelSpeed: 3, sprite: null };
+const otherCars = [];
+let road = [];
+let keys = {};
+let timeLeft = 60;
+
+function createRoad() {
+  road = [];
+  for (let i = 0; i < segments; i++) {
+    let curve = Math.sin(i / 30) * 2; // curves left and right
+    road.push({ index: i, curve: curve, y: Math.pow(i, 1.2) * 0.8 });
+  }
+}
+
+function drawRoad() {
+  for (let n = segments - 1; n > 0; n--) {
+    let p = road[n];
+    // Perspective
+    let perspective = cameraDepth / (n / segments);
+    let roadHalfWidth = perspective * roadWidth / 2;
+    let middle = width / 2 + playerCar.x * perspective * 350;
+    let y = height - (p.y * perspective) - 100;
+    ctx.fillStyle = n % 2 === 0 ? '#888' : '#777';
+    ctx.beginPath();
+    ctx.moveTo(middle - roadHalfWidth, y);
+    ctx.lineTo(middle + roadHalfWidth, y);
+    // next segment
+    let q = road[n - 1];
+    let perspective2 = cameraDepth / ((n-1) / segments);
+    let roadHalfWidth2 = perspective2 * roadWidth / 2;
+    let middle2 = width / 2 + playerCar.x * perspective2 * 350;
+    let y2 = height - (q.y * perspective2) - 100;
+    ctx.lineTo(middle2 + roadHalfWidth2, y2);
+    ctx.lineTo(middle2 - roadHalfWidth2, y2);
+    ctx.closePath();
+    ctx.fill();
+    // Side grass
+    ctx.fillStyle = n % 2 === 0 ? '#0c0' : '#090';
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.lineTo(width, y2);
+    ctx.lineTo(0, y2);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawPlayer() {
+  // Draw simplified car as rectangle/shape
+  ctx.save();
+  ctx.translate(width / 2 + playerCar.x * 350, height - 120);
+  ctx.fillStyle = '#f22';
+  ctx.fillRect(-20, -10, 40, 60);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-17, 30, 34, 12);
+  ctx.restore();
+}
+
+function drawOtherCars() {
+  otherCars.forEach(car => {
+    let n = Math.round(car.segment);
+    let perspective = cameraDepth / (n / segments);
+    let roadHalfWidth = perspective * roadWidth / 2;
+    let middle = width / 2 + car.x * perspective * 350;
+    //console.log("n: " + n + " road: " + road);
+    let y = height - (road[n].y * perspective) - 110;
+    ctx.save();
+    ctx.translate(middle, y);
+    ctx.fillStyle = car.color;
+    ctx.fillRect(-17, -8, 34, 50);
+    ctx.restore();
+  });
+}
+
+function stepOtherCars() {
+  otherCars.forEach(car => {
+    car.segment -= Math.round(playerCar.speed / 120);
+    if (car.segment < 0) car.segment = segments-1;
+  });
+}
+
+function collisionCheck() {
+  otherCars.forEach(car => {
+    if (Math.abs(car.segment - (segments-8)) < 2 && Math.abs(car.x - playerCar.x) < 0.09) {
+      playerCar.speed *= 0.7; // crash slows down
+    }
+  });
+}
+
+function drawUI() {
+  ctx.fillStyle = '#fff';
+  ctx.font = '24px monospace';
+  ctx.fillText('Speed: ' + Math.round(playerCar.speed) + 'km/h', 20, 40);
+  ctx.fillText('Time: ' + Math.round(timeLeft) + 's', 700, 40);
+}
+
+function gameLoop() {
+  ctx.clearRect(0, 0, width, height);
+  drawRoad();
+  drawOtherCars();
+  drawPlayer();
+  drawUI();
+  collisionCheck();
+  stepOtherCars();
+
+  // Player control
+  if (keys['ArrowLeft']) playerCar.x -= 0.02 * playerCar.speed/120;
+  if (keys['ArrowRight']) playerCar.x += 0.02 * playerCar.speed/120;
+  if (keys['ArrowUp']) playerCar.speed = Math.min(playerCar.speed + playerCar.accel, playerCar.maxSpeed);
+  else playerCar.speed = Math.max(playerCar.speed - playerCar.decel, 0);
+
+  // Clamp car horizontal
+  playerCar.x = Math.max(-1, Math.min(1, playerCar.x));
+
+  // Time limit
+  if (playerCar.speed > 10) timeLeft -= 0.02;
+  if (timeLeft < 0) {
+    ctx.font = '48px monospace';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('GAME OVER', width/2 - 150, height / 2);
+    return;
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// Input
+window.addEventListener('keydown', e => { keys[e.key] = true });
+window.addEventListener('keyup', e => { keys[e.key] = false });
+
+// Initialize
+createRoad();
+for (let i=0;i<8;i++) {
+  otherCars.push({ x: Math.random()*2-1, segment: Math.random()*segments, color:'#'+Math.floor(Math.random()*0x999999+0x222222).toString(16) });
+}
+playerCar.speed = 0;
+gameLoop();
+  </script>
+</body>
+</html>
